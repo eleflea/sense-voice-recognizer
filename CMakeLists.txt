@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.13 FATAL_ERROR)
 
 project(sense-voice-recongizer 
   VERSION 0.1
-  DESCRIPTION "A simple sense voice based recongizer"
+  DESCRIPTION "A C++ project for web-based ASR service using Sense Voice ONNX model for fast & efficient speech recognition."
   LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
