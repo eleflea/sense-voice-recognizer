@@ -58,8 +58,10 @@ set(crow_CROW_BUILD_TESTS OFF)
 FetchContent_MakeAvailable(Crow)
 
 set(sources
+  app.cc
   audio.cc
-  recongizer.cc)
+  recongizer.cc
+  task_manager.cc)
 
 add_executable(sense-voice-recongizer ${sources})
 
