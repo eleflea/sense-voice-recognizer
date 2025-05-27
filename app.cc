@@ -63,7 +63,7 @@ crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_man
   crow::SimpleApp app;
 
   CROW_ROUTE(app, "/health")
-  ([&task_manager]() {
+  ([task_manager]() {
     crow::json::wvalue res;
     res["status"] = "ok";
     res["queue_size"] = task_manager->getQueueSize();
@@ -72,15 +72,21 @@ crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_man
 
   const auto &config = web_config;
 
-  CROW_ROUTE(app, "/asr").methods("POST"_method)([&task_manager, &config](const crow::request &req) {
+  CROW_ROUTE(app, "/asr").methods("POST"_method)([task_manager, &config](const crow::request &req) {
     const auto begin = std::chrono::steady_clock::now();
 
-    crow::multipart::message multipart_req(req);
+    crow::multipart::mp_map part_map;
+    try {
+      crow::multipart::message multipart_req(req);
+      part_map = multipart_req.part_map;
+    } catch (const std::exception &e) {
+      return crow::response(400, std::string("Multipart parse error: ") + e.what());
+    }
 
     std::string language = "auto";
     std::vector<uint8_t> file_data;
 
-    for (auto &[key, part] : multipart_req.part_map) {
+    for (auto &[key, part] : part_map) {
       if (key == "language" && !part.body.empty()) {
         language = part.body;
       } else if (key == "file") {
@@ -92,9 +98,8 @@ crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_man
       return crow::response(400, "Missing 'file' field.");
     }
 
-    AudioData wave;
-    auto result = ReadAudio(file_data, config.resample_rate, wave);
-    if (!result) {
+    auto wave = ReadAudio(file_data, config.resample_rate);
+    if (!wave.isValid()) {
       return crow::response(400, "Failed to read audio file.");
     }
 
@@ -129,7 +134,7 @@ int32_t main() {
   recongizer->Init();
 
   auto task_manager = std::make_shared<RecognitionTaskManager>(
-    [&recongizer](const AudioData &wave) { return recongizer->Recognize(wave); });
+    [recongizer](const AudioData &wave) { return recongizer->Recognize(wave); });
 
   auto app = SetupCrow(task_manager, web_config);
   app.bindaddr(web_config.host).port(web_config.port).multithreaded().run();

@@ -39,6 +39,6 @@ void RecognitionTaskManager::processTasks() {
 
     auto result = recognitionTaskProcessor_(task.input);
 
-    task.promise.set_value(result);
+    task.promise.set_value(std::move(result));
   }
 }
