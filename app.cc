@@ -1,13 +1,13 @@
 #include <crow.h>
-#include <yaml-cpp/yaml.h>
 
 #include <chrono>
 #include <iostream>
 #include <string>
 #include <memory>
 
+#include "config.h"
 #include "audio.h"
-#include "recongizer.h"
+#include "recognizer.h"
 #include "task_manager.h"
 #include "sherpa-onnx/c-api/cxx-api.h"
 
@@ -19,47 +19,18 @@ using std::cerr;
 using std::cout;
 using std::string;
 
-struct WebConfig {
-  string host;
-  int32_t port;
-  int32_t resample_rate;
-  int32_t max_processing_time;
-};
+OfflineRecognizerConfig GetRecognizerConfig(const Config &config) {
+  OfflineRecognizerConfig recognizer_config;
+  recognizer_config.model_config.sense_voice.model = config.get<string>("MODEL_WEIGHTS");
+  recognizer_config.model_config.sense_voice.use_itn = config.get<bool>("MODEL_USE_ITN");
+  recognizer_config.model_config.sense_voice.language = config.get<string>("MODEL_LANGUAGE");
+  recognizer_config.model_config.tokens = config.get<string>("MODEL_TOKENS");
+  recognizer_config.model_config.num_threads = config.get<int32_t>("MODEL_NUM_THREADS");
 
-struct AppConfig {
-  OfflineRecognizerConfig model_config;
-  WebConfig web_config;
-};
-
-OfflineRecognizerConfig LoadModelConfig(const YAML::Node &node) {
-  OfflineRecognizerConfig config;
-  config.model_config.sense_voice.model = node["weights"].as<string>();
-  config.model_config.sense_voice.use_itn = node["use_itn"].as<bool>();
-  config.model_config.sense_voice.language = node["language"].as<string>();
-  config.model_config.tokens = node["tokens"].as<string>();
-  config.model_config.num_threads = node["num_threads"].as<int32_t>();
-
-  return config;
+  return recognizer_config;
 }
 
-WebConfig LoadWebConfig(const YAML::Node &node) {
-  WebConfig config;
-  config.host = node["host"].as<string>();
-  config.port = node["port"].as<int32_t>();
-  config.resample_rate = node["resample_rate"].as<int32_t>();
-  config.max_processing_time = node["max_processing_time"].as<int32_t>();
-  return config;
-}
-
-AppConfig LoadConfig(const string &filename) {
-  YAML::Node node = YAML::LoadFile(filename);
-  AppConfig config;
-  config.model_config = LoadModelConfig(node["model"]);
-  config.web_config = LoadWebConfig(node["web"]);
-  return config;
-}
-
-crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_manager, const WebConfig &web_config) {
+crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_manager, const Config &config) {
   crow::SimpleApp app;
 
   CROW_ROUTE(app, "/health")
@@ -70,10 +41,12 @@ crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_man
     return res;
   });
 
-  const auto &config = web_config;
-
   CROW_ROUTE(app, "/asr").methods("POST"_method)([task_manager, &config](const crow::request &req) {
     const auto begin = std::chrono::steady_clock::now();
+
+    if (task_manager->getQueueSize() >= config.get<int32_t>("MAX_QUEUE_CAPACITY")) {
+      return crow::response(503, "Server is busy, please try again later.");
+    }
 
     crow::multipart::mp_map part_map;
     try {
@@ -98,14 +71,15 @@ crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_man
       return crow::response(400, "Missing 'file' field.");
     }
 
-    auto wave = ReadAudio(file_data, config.resample_rate);
+    auto wave = ReadAudio(file_data, config.get<int32_t>("AUDIO_RESAMPLE_RATE"));
     if (!wave.isValid()) {
       return crow::response(400, "Failed to read audio file.");
     }
 
     auto future = task_manager->submitTask(wave);
 
-    if (future.wait_for(std::chrono::seconds(config.max_processing_time)) != std::future_status::ready) {
+    if (future.wait_for(std::chrono::seconds(config.get<int32_t>("MAX_PROCESSING_TIME"))) !=
+        std::future_status::ready) {
       return crow::response(504, "Timeout while processing");
     }
 
@@ -123,21 +97,21 @@ crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_man
 }
 
 int32_t main() {
-  string config_filename = "config.yaml";
-  auto [model_config, web_config] = LoadConfig(config_filename);
+  Config config;
 
-  auto recongizer = std::make_shared<Recongizer>(model_config);
-  if (!recongizer) {
-    cerr << "Failed to create recongizer with config: " << config_filename << "\n";
+  auto recognizer_config = GetRecognizerConfig(config);
+  auto recognizer = std::make_shared<Recognizer>(recognizer_config);
+  if (!recognizer) {
+    cerr << "Failed to create recognizer with config.\n";
     return -1;
   }
-  recongizer->Init();
+  recognizer->Init();
 
   auto task_manager = std::make_shared<RecognitionTaskManager>(
-    [recongizer](const AudioData &wave) { return recongizer->Recognize(wave); });
+    [recognizer](const AudioData &wave) { return recognizer->Recognize(wave); });
 
-  auto app = SetupCrow(task_manager, web_config);
-  app.bindaddr(web_config.host).port(web_config.port).multithreaded().run();
+  auto app = SetupCrow(task_manager, config);
+  app.bindaddr(config.get<string>("WEB_HOST")).port(config.get<int32_t>("WEB_PORT")).multithreaded().run();
 
   return 0;
 }

@@ -24,13 +24,6 @@ FetchContent_MakeAvailable(sherpa-onnx)
 FetchContent_GetProperties(onnxruntime)
 
 FetchContent_Declare(
-  yaml-cpp
-  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
-  GIT_TAG 0.8.0
-)
-FetchContent_MakeAvailable(yaml-cpp)
-
-FetchContent_Declare(
   Crow
   GIT_REPOSITORY https://github.com/CrowCpp/Crow.git
   GIT_TAG v1.2.1.2
@@ -42,7 +35,7 @@ FetchContent_MakeAvailable(Crow)
 set(sources
   app.cc
   audio.cc
-  recongizer.cc
+  recognizer.cc
   task_manager.cc)
 
 add_executable(sense-voice-recongizer ${sources})
@@ -52,7 +45,5 @@ target_link_libraries(sense-voice-recongizer PRIVATE Threads::Threads ${DL_LIBRA
 target_link_libraries(sense-voice-recongizer PRIVATE
   sherpa-onnx-cxx-api
   "${onnxruntime_SOURCE_DIR}/lib")
-
-target_link_libraries(sense-voice-recongizer PUBLIC yaml-cpp::yaml-cpp)
 
 target_link_libraries(sense-voice-recongizer PUBLIC Crow::Crow)

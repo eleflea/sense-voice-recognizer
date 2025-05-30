@@ -1,5 +1,5 @@
 #define MINIAUDIO_IMPLEMENTATION  // Important: define this in exactly one .c or .cpp file
-#include "miniaudio.h"
+#include "include/miniaudio.h"
 
 #include <iostream>
 #include <fstream>  // For example usage

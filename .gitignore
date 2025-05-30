@@ -36,3 +36,6 @@ models/*
 
 # build files
 build/
+
+# config files
+.env.local
