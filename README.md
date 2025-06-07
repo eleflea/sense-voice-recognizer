@@ -1,1 +1,1 @@
-# sense-voice-recongizer
+# sense-voice-recognizer

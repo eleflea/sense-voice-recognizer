@@ -13,7 +13,7 @@
 
 class Config {
  public:
-  Config() { dotenv::init(".env.local"); }
+  Config() { dotenv::init(".env"); }
 
   template <typename T>
   T get(const std::string &key) const {

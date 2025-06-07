@@ -38,4 +38,4 @@ models/*
 build/
 
 # config files
-.env.local
+.env

@@ -1,9 +1,11 @@
 #include <crow.h>
+#include <nlohmann/json.hpp>
 
 #include <chrono>
 #include <iostream>
 #include <string>
 #include <memory>
+#include <set>
 
 #include "config.h"
 #include "audio.h"
@@ -11,6 +13,7 @@
 #include "task_manager.h"
 #include "sherpa-onnx/c-api/cxx-api.h"
 
+using json = nlohmann::json;
 using sherpa_onnx::cxx::OfflineRecognizer;
 using sherpa_onnx::cxx::OfflineRecognizerConfig;
 using sherpa_onnx::cxx::OfflineRecognizerResult;
@@ -19,12 +22,26 @@ using std::cerr;
 using std::cout;
 using std::string;
 
+struct RoundedFloatVector {
+  std::vector<float> data;
+};
+
+void to_json(json &j, const RoundedFloatVector &rfv) {
+  j = json::array();
+  for (auto num : rfv.data) {
+    double rounded = static_cast<int>(num * 100 + (num >= 0 ? 0.5 : -0.5)) / 100.0;  // Round to 2 decimal places
+    j.push_back(rounded);
+  }
+}
+
+static std::set<string> NO_AUDIO_PUNCTUATION = {"!", "'", ",", ".", ";", "?", "~"};
+
 OfflineRecognizerConfig GetRecognizerConfig(const Config &config) {
   OfflineRecognizerConfig recognizer_config;
-  recognizer_config.model_config.sense_voice.model = config.get<string>("MODEL_WEIGHTS");
+  recognizer_config.model_config.sense_voice.model = config.get<string>("MODEL_WEIGHTS_LOCAL");
   recognizer_config.model_config.sense_voice.use_itn = config.get<bool>("MODEL_USE_ITN");
   recognizer_config.model_config.sense_voice.language = config.get<string>("MODEL_LANGUAGE");
-  recognizer_config.model_config.tokens = config.get<string>("MODEL_TOKENS");
+  recognizer_config.model_config.tokens = config.get<string>("MODEL_TOKENS_LOCAL");
   recognizer_config.model_config.num_threads = config.get<int32_t>("MODEL_NUM_THREADS");
 
   return recognizer_config;
@@ -84,13 +101,30 @@ crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_man
     }
 
     auto asr_result = future.get();
+    auto is_no_audio = std::all_of(asr_result.tokens.begin(), asr_result.tokens.end(),
+                                   [](const std::string &token) { return NO_AUDIO_PUNCTUATION.count(token) > 0; });
+    if (is_no_audio) {
+      asr_result.text = "";
+      asr_result.tokens.clear();
+      asr_result.timestamps.clear();
+    }
+    json result_json = {
+      {"status", is_no_audio ? "no_audio" : "normal"},
+      {"lang", asr_result.lang},
+      {"emotion", asr_result.emotion},
+      {"event", asr_result.event},
+      {"text", asr_result.text},
+      {"timestamps", RoundedFloatVector{asr_result.timestamps}},
+      {"tokens", asr_result.tokens},
+    };
+
     const auto end = std::chrono::steady_clock::now();
     const float elapsed_seconds = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() / 1000.;
     float duration = wave.samples.size() / static_cast<float>(wave.sample_rate);
     float rtf = duration / elapsed_seconds;
     cout << "RTF = " << duration << "s / " << elapsed_seconds << "s = " << rtf << "\n";
 
-    return crow::response(200, asr_result.json);
+    return crow::response(200, result_json.dump());
   });
 
   return app;
