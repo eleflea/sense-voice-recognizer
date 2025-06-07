@@ -1,0 +1,26 @@
+services:
+  sense-voice:
+    build:
+      context: .
+    environment:
+      - MODEL_WEIGHTS_DOCKER=${MODEL_WEIGHTS_DOCKER}
+      - MODEL_TOKENS_DOCKER=${MODEL_TOKENS_DOCKER}
+      - MODEL_USE_ITN=${MODEL_USE_ITN}
+      - MODEL_LANGUAGE=${MODEL_LANGUAGE}
+      - MODEL_NUM_THREADS=${MODEL_NUM_THREADS}
+      - AUDIO_RESAMPLE_RATE=${AUDIO_RESAMPLE_RATE}
+      - MAX_PROCESSING_TIME=${MAX_PROCESSING_TIME}
+      - MAX_QUEUE_CAPACITY=${MAX_QUEUE_CAPACITY}
+      - WEB_HOST=${WEB_HOST}
+      - WEB_PORT=${WEB_PORT}
+    expose:
+      - "${WEB_PORT}"
+    volumes:
+      - "${MODEL_WEIGHTS_DOCKER}:/app/models/model.int8.onnx:ro"
+      - "${MODEL_TOKENS_DOCKER}:/app/models/tokens.txt:ro"
+    networks:
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
