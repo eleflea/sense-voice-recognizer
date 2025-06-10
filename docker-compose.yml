@@ -13,6 +13,7 @@ services:
       - MAX_QUEUE_CAPACITY=${MAX_QUEUE_CAPACITY}
       - WEB_HOST=${WEB_HOST}
       - WEB_PORT=${WEB_PORT}
+      - BEARER_TOKEN=${BEARER_TOKEN}
     ports:
       - "${WEB_PORT}:${WEB_PORT}"
     volumes:

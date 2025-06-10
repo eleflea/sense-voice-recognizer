@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdlib>
 #include <string>
 #include <stdexcept>
@@ -30,6 +32,11 @@ class Config {
       return convert<T>(*raw);
     }
     return defaultValue;
+  }
+
+  bool has(const std::string &key) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return cache_.find(key) != cache_.end() || std::getenv(key.c_str()) != nullptr;
   }
 
  private:

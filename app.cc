@@ -6,11 +6,13 @@
 #include <string>
 #include <memory>
 #include <set>
+#include <optional>
 
 #include "config.h"
 #include "audio.h"
 #include "recognizer.h"
 #include "task_manager.h"
+#include "middlewares.h"
 #include "sherpa-onnx/c-api/cxx-api.h"
 
 using json = nlohmann::json;
@@ -47,8 +49,15 @@ OfflineRecognizerConfig GetRecognizerConfig(const Config &config) {
   return recognizer_config;
 }
 
-crow::SimpleApp SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_manager, const Config &config) {
-  crow::SimpleApp app;
+crow::App<BearerAuthMiddleware> SetupCrow(const std::shared_ptr<RecognitionTaskManager> task_manager,
+                                          const Config &config) {
+  std::optional<std::string> bearer_token = std::nullopt;
+  if (config.has("BEARER_TOKEN")) {
+    bearer_token.emplace(config.get<std::string>("BEARER_TOKEN"));
+  }
+  BearerAuthMiddleware bearer_auth_middleware(bearer_token);
+
+  crow::App<BearerAuthMiddleware> app(bearer_auth_middleware);
 
   CROW_ROUTE(app, "/health")
   ([task_manager]() {
